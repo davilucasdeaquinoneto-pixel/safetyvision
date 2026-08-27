@@ -55,7 +55,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="SafetyVision API",
-    version="2.0.0",
+    version="2.1.0",
     description="Triagem visual conservadora de riscos ocupacionais.",
     lifespan=lifespan,
 )
@@ -161,6 +161,7 @@ async def analyze(
         limitations=provider_result["limitations"],
         risks=risks,
         reported_observations=[clean_notes] if clean_notes else [],
+        ai_analysis=_legacy_ai_analysis(risks),
     )
 
     stored = response.model_dump(mode="json")
@@ -173,6 +174,26 @@ async def analyze(
     )
     response.analysis_id = analysis_id
     return response
+
+
+def _legacy_ai_analysis(risks: list[RiskItem]) -> dict[str, object]:
+    severity_map = {
+        "high": "Alta",
+        "medium": "Media",
+        "low": "Baixa",
+    }
+    highest = next(
+        (level for level in ("high", "medium", "low") if any(risk.severity == level for risk in risks)),
+        "low",
+    )
+
+    return {
+        "analysis": {
+            "risks": [risk.title for risk in risks],
+            "risk_level": severity_map[highest],
+            "recommendations": [risk.recommendation for risk in risks],
+        }
+    }
 
 
 def _validate_and_prepare_image(
