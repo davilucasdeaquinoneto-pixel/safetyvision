@@ -92,8 +92,8 @@ def analyze_image(
     client = OpenAI(
         api_key=token,
         base_url=base_url,
-        timeout=float(os.getenv("VISION_TIMEOUT_SECONDS", "45")),
-        max_retries=1,
+        timeout=float(os.getenv("VISION_TIMEOUT_SECONDS", "50")),
+        max_retries=0,
     )
 
     data_url = _to_data_url(image_bytes, mime_type)
@@ -103,7 +103,7 @@ def analyze_image(
         completion = client.chat.completions.create(
             model=model,
             temperature=0.1,
-            max_tokens=2600,
+            max_tokens=1800,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
