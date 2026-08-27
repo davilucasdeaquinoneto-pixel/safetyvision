@@ -11,11 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from ai_engine import (
-    DEFAULT_MODEL,
     VisionConfigurationError,
     VisionProviderError,
     VisionResponseError,
     analyze_image,
+    resolve_model_name,
 )
 from database import create_database, save_analysis
 from models import AnalysisResponse, AnalysisSummary, ImageInfo, RiskItem
@@ -55,7 +55,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="SafetyVision API",
-    version="2.1.0",
+    version="2.2.0",
     description="Triagem visual conservadora de riscos ocupacionais.",
     lifespan=lifespan,
 )
@@ -88,13 +88,17 @@ def home() -> dict:
         "status": "online",
         "message": "SafetyVision API funcionando.",
         "ai_configured": bool(os.getenv("HF_TOKEN", "").strip()),
-        "model": os.getenv("VISION_MODEL", DEFAULT_MODEL),
+        "model": resolve_model_name(),
     }
 
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "healthy", "ai_configured": bool(os.getenv("HF_TOKEN", "").strip())}
+    return {
+        "status": "healthy",
+        "ai_configured": bool(os.getenv("HF_TOKEN", "").strip()),
+        "model": resolve_model_name(),
+    }
 
 
 @app.post("/analyze", response_model=AnalysisResponse)
