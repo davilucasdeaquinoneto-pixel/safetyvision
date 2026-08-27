@@ -12,7 +12,13 @@ from pydantic import ValidationError
 from models import RawVisionResult, RiskItem
 
 
-DEFAULT_MODEL = "Qwen/Qwen2.5-VL-3B-Instruct"
+DEFAULT_MODEL = "Qwen/Qwen3-VL-8B-Instruct:cheapest"
+LEGACY_UNAVAILABLE_MODELS = {
+    "Qwen/Qwen2.5-VL-3B-Instruct",
+    "Qwen/Qwen2.5-VL-3B-Instruct:fastest",
+    "Qwen/Qwen2.5-VL-3B-Instruct:cheapest",
+    "Qwen/Qwen2.5-VL-3B-Instruct:preferred",
+}
 DEFAULT_BASE_URL = "https://router.huggingface.co/v1"
 
 SYSTEM_PROMPT = """
@@ -74,6 +80,13 @@ class VisionResponseError(RuntimeError):
     pass
 
 
+def resolve_model_name(configured_model: str | None = None) -> str:
+    model = (configured_model or os.getenv("VISION_MODEL", "")).strip()
+    if not model or model in LEGACY_UNAVAILABLE_MODELS:
+        return DEFAULT_MODEL
+    return model
+
+
 def analyze_image(
     image_bytes: bytes,
     mime_type: str,
@@ -87,7 +100,7 @@ def analyze_image(
             "A IA visual ainda não foi configurada. Adicione HF_TOKEN no serviço da API."
         )
 
-    model = os.getenv("VISION_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    model = resolve_model_name()
     base_url = os.getenv("HF_BASE_URL", DEFAULT_BASE_URL).strip() or DEFAULT_BASE_URL
     client = OpenAI(
         api_key=token,
@@ -120,17 +133,28 @@ def analyze_image(
         )
     except (APITimeoutError, APIConnectionError) as exc:
         raise VisionProviderError(
-            "O provedor de IA demorou para responder. Tente novamente em instantes."
+            "O provedor de IA demorou para responder ou ficou indisponível. Tente novamente em instantes."
         ) from exc
     except APIStatusError as exc:
         if exc.status_code == 402:
-            message = "Os créditos gratuitos da IA terminaram. Aguarde a renovação ou adicione créditos."
+            message = "Os créditos da IA terminaram ou o provedor exige saldo para esse modelo."
         elif exc.status_code == 429:
             message = "O limite temporário da IA foi atingido. Aguarde e tente novamente."
         elif exc.status_code in {401, 403}:
             message = "O token da Hugging Face é inválido ou não possui permissão para inferência."
+        elif exc.status_code == 404:
+            message = (
+                f"O modelo {model} não está disponível no provedor de inferência configurado."
+            )
+        elif exc.status_code == 400:
+            message = (
+                f"O provedor recusou a requisição para o modelo {model}. "
+                "Verifique disponibilidade do modelo e suporte a imagens."
+            )
+        elif exc.status_code >= 500:
+            message = "O serviço de IA da Hugging Face está indisponível no momento."
         else:
-            message = "O provedor de IA não conseguiu analisar a imagem."
+            message = f"O provedor de IA retornou erro HTTP {exc.status_code} para o modelo {model}."
         raise VisionProviderError(message) from exc
 
     content = completion.choices[0].message.content if completion.choices else None
