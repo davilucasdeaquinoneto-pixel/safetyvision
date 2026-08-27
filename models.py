@@ -116,4 +116,4 @@ class AnalysisResponse(BaseModel):
     limitations: list[str]
     risks: list[RiskItem]
     reported_observations: list[str]
-
+    ai_analysis: dict[str, object] | None = None
